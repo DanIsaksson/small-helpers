@@ -1,0 +1,2173 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Olden Era — Damage Simulator</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400&display=swap');
+  /* =========================================================
+     Heroes of Might & Magic: Olden Era — Damage Simulator
+     Palette pulled from in-game UI references: deep navy fields,
+     warm gold trim, cream text, jeweled stat colors.
+     ========================================================= */
+
+  :root {
+    --bg-deep:      #06101f;
+    --bg-mid:       #0f1d38;
+    --bg-panel:     #15264a;
+    --bg-panel-2:   #1c305a;
+    --gold:         #c9a559;
+    --gold-bright:  #e6c878;
+    --gold-dim:     #8a6f3a;
+    --gold-faint:   rgba(201, 165, 89, 0.25);
+    --cream:        #f4e9cf;
+    --cream-dim:    #c9bfa6;
+    --muted:        #8fa0bb;
+    --c-attack:     #d4654a;
+    --c-defense:    #5a8fc4;
+    --c-hp:         #7ab87a;
+    --c-stack:      #e6c878;
+    --c-damage:     #c9a559;
+    --c-danger:     #c25555;
+    --c-win:        #7ab87a;
+    --shadow-deep:  0 8px 32px rgba(0, 0, 0, 0.5);
+    --shadow-soft:  0 2px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    color: var(--cream);
+    background:
+      radial-gradient(ellipse at top, #1a2a52 0%, transparent 60%),
+      radial-gradient(ellipse at bottom, #0a1a36 0%, transparent 70%),
+      linear-gradient(180deg, var(--bg-deep) 0%, var(--bg-mid) 100%);
+    background-attachment: fixed;
+    overflow-x: hidden;
+  }
+
+  /* Subtle starfield using radial gradients for distant points of light */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(1px 1px at 23% 17%, rgba(255,255,255,0.4), transparent),
+      radial-gradient(1px 1px at 67% 33%, rgba(255,255,255,0.3), transparent),
+      radial-gradient(1px 1px at 14% 78%, rgba(255,255,255,0.35), transparent),
+      radial-gradient(1px 1px at 88% 52%, rgba(255,255,255,0.25), transparent),
+      radial-gradient(1px 1px at 41% 89%, rgba(255,255,255,0.4), transparent),
+      radial-gradient(1px 1px at 92% 12%, rgba(255,255,255,0.3), transparent),
+      radial-gradient(2px 2px at 8% 42%, rgba(230, 200, 120, 0.4), transparent),
+      radial-gradient(1px 1px at 55% 65%, rgba(255,255,255,0.3), transparent);
+    background-repeat: no-repeat;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  #app {
+    position: relative;
+    z-index: 1;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 24px 32px 48px;
+  }
+
+  /* ---------- HEADER / TABS ---------- */
+
+  header.top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 0 24px;
+    border-bottom: 1px solid var(--gold-faint);
+    margin-bottom: 32px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: rgba(15, 29, 56, 0.6);
+    border: 1px solid var(--gold-faint);
+    border-radius: 2px;
+    padding: 4px;
+    box-shadow: var(--shadow-soft);
+  }
+
+  .tab {
+    background: transparent;
+    border: none;
+    color: var(--cream-dim);
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 10px 22px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    border-radius: 1px;
+  }
+
+  .tab:hover {
+    color: var(--cream);
+    background: rgba(201, 165, 89, 0.08);
+  }
+
+  .tab.active {
+    color: var(--bg-deep);
+    background: linear-gradient(180deg, var(--gold-bright) 0%, var(--gold) 100%);
+    box-shadow: 0 2px 8px rgba(201, 165, 89, 0.4);
+    font-weight: 600;
+  }
+
+  .title-sigil {
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.25em;
+    color: var(--gold-bright);
+    text-transform: uppercase;
+    text-shadow: 0 0 12px rgba(230, 200, 120, 0.4);
+  }
+
+  .title-sigil .ornament {
+    color: var(--gold-dim);
+    margin: 0 12px;
+  }
+
+  .help-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--gold);
+    background: rgba(15, 29, 56, 0.8);
+    color: var(--gold-bright);
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-soft);
+  }
+
+  .help-btn:hover {
+    background: var(--gold);
+    color: var(--bg-deep);
+    box-shadow: 0 0 16px rgba(230, 200, 120, 0.5);
+    transform: scale(1.05);
+  }
+
+  /* ---------- BATTLE ARENA ---------- */
+
+  .arena {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 24px;
+    align-items: start;
+    margin-bottom: 32px;
+  }
+
+  .unit-side {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .unit-side.left .unit-row { flex-direction: row; }
+  .unit-side.right .unit-row { flex-direction: row-reverse; }
+
+  .unit-row {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .unit-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  /* ---------- STACK BADGE (above unit) ---------- */
+
+  .stack-badge {
+    position: relative;
+    background: linear-gradient(180deg, var(--bg-panel-2) 0%, var(--bg-panel) 100%);
+    border: 2px solid var(--gold);
+    border-radius: 4px;
+    padding: 8px 16px;
+    min-width: 140px;
+    text-align: center;
+    box-shadow: var(--shadow-deep), inset 0 0 12px rgba(230, 200, 120, 0.1);
+  }
+
+  .stack-badge::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 4px;
+    background: linear-gradient(135deg, transparent 40%, rgba(230, 200, 120, 0.3) 50%, transparent 60%);
+    pointer-events: none;
+  }
+
+  .stack-badge-label {
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    color: var(--gold-bright);
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+
+  .stack-badge input {
+    background: transparent;
+    border: none;
+    color: var(--cream);
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 28px;
+    font-weight: 700;
+    text-align: center;
+    width: 100%;
+    padding: 0;
+    outline: none;
+    text-shadow: 0 0 10px rgba(230, 200, 120, 0.3);
+  }
+
+  .stack-badge input:focus {
+    color: var(--gold-bright);
+  }
+
+  /* hide spinners */
+  .stack-badge input::-webkit-outer-spin-button,
+  .stack-badge input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .stack-badge input[type=number] { -moz-appearance: textfield; }
+
+  /* ---------- UNIT FIGURE (SVG) ---------- */
+
+  .unit-figure-wrap {
+    position: relative;
+    width: 160px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .hp-bar-outer {
+    width: 130px;
+    height: 8px;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--gold-dim);
+    border-radius: 1px;
+    margin-bottom: 8px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .hp-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #5fa05f 0%, #7ab87a 100%);
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 6px rgba(122, 184, 122, 0.4);
+  }
+
+  .hp-bar-text {
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 10px;
+    color: var(--cream-dim);
+    margin-bottom: 6px;
+    letter-spacing: 0.05em;
+  }
+
+  .unit-svg {
+    width: 160px;
+    height: 220px;
+    transition: transform 0.3s ease, filter 0.3s ease;
+  }
+
+  .unit-side.left .unit-svg.attacking { animation: lungeRight 0.5s ease; }
+  .unit-side.right .unit-svg.attacking { animation: lungeLeft 0.5s ease; }
+  .unit-svg.taking-hit { animation: shake 0.4s ease; filter: brightness(1.4) sepia(0.8) hue-rotate(-30deg); }
+  .unit-svg.defeated { filter: grayscale(1) brightness(0.4); opacity: 0.5; }
+
+  @keyframes lungeRight {
+    0% { transform: translateX(0); }
+    40% { transform: translateX(40px); }
+    100% { transform: translateX(0); }
+  }
+  @keyframes lungeLeft {
+    0% { transform: translateX(0); }
+    40% { transform: translateX(-40px); }
+    100% { transform: translateX(0); }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-8px); }
+    40% { transform: translateX(8px); }
+    60% { transform: translateX(-6px); }
+    80% { transform: translateX(6px); }
+  }
+
+  /* Floating damage numbers */
+  .damage-float {
+    position: absolute;
+    top: 30%;
+    left: 50%;
+    transform: translate(-50%, 0);
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--c-danger);
+    text-shadow: 0 0 12px rgba(0, 0, 0, 0.8), 0 0 4px rgba(0, 0, 0, 0.9);
+    pointer-events: none;
+    animation: floatUp 1.6s ease-out forwards;
+    z-index: 10;
+  }
+  .damage-float .killed {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--cream);
+    letter-spacing: 0.1em;
+    margin-top: 2px;
+  }
+
+  @keyframes floatUp {
+    0% { opacity: 0; transform: translate(-50%, 20px) scale(0.8); }
+    20% { opacity: 1; transform: translate(-50%, 0) scale(1.1); }
+    80% { opacity: 1; transform: translate(-50%, -40px) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -60px) scale(0.95); }
+  }
+
+  /* ---------- STATS PANEL ---------- */
+
+  .stats-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    max-width: 220px;
+  }
+
+  .stat-card {
+    background: linear-gradient(180deg, rgba(28, 48, 90, 0.7) 0%, rgba(15, 29, 56, 0.7) 100%);
+    border: 1px solid var(--gold-faint);
+    border-radius: 2px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+  }
+
+  .stat-card:hover {
+    border-color: var(--gold);
+    background: linear-gradient(180deg, rgba(36, 60, 110, 0.8) 0%, rgba(20, 36, 70, 0.8) 100%);
+  }
+
+  .stat-card.expanded {
+    border-color: var(--gold-bright);
+    box-shadow: 0 0 12px rgba(230, 200, 120, 0.2);
+  }
+
+  .stat-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .unit-side.right .stat-header {
+    flex-direction: row-reverse;
+  }
+
+  .stat-icon {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .stat-icon svg { width: 100%; height: 100%; }
+
+  .stat-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .unit-side.right .stat-body { align-items: flex-end; }
+
+  .stat-label {
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    color: var(--cream-dim);
+    text-transform: uppercase;
+  }
+
+  .stat-value-row {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    margin-top: 2px;
+  }
+
+  .unit-side.right .stat-value-row { flex-direction: row-reverse; }
+
+  /* Damage is read as a range "min — max" regardless of side, so we
+     do NOT reverse it on the right (only single-value stats flip). */
+  .unit-side.right .stat-card[data-stat="damage"] .stat-value-row {
+    flex-direction: row;
+  }
+
+  .stat-input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px dashed var(--gold-dim);
+    color: var(--cream);
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 18px;
+    font-weight: 600;
+    width: 60px;
+    padding: 0 4px 2px;
+    outline: none;
+    text-align: center;
+  }
+
+  .unit-side.right .stat-input { text-align: center; }
+
+  .stat-input:focus {
+    border-bottom-color: var(--gold-bright);
+    color: var(--gold-bright);
+  }
+
+  .stat-input::-webkit-outer-spin-button,
+  .stat-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .stat-input[type=number] { -moz-appearance: textfield; }
+
+  .stat-range-input {
+    width: 44px;
+    font-size: 15px;
+  }
+
+  .stat-range-sep {
+    color: var(--gold-dim);
+    font-size: 14px;
+  }
+
+  /* Slider that drops down when stat card is expanded */
+  .slider-container {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease, margin-top 0.25s ease;
+    margin-top: 0;
+  }
+
+  .stat-card.expanded .slider-container {
+    max-height: 80px;
+    margin-top: 10px;
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .slider-mini-label {
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 8px;
+    color: var(--cream-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    min-width: 28px;
+  }
+
+  /* Custom range slider */
+  input[type="range"].themed {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    background: linear-gradient(90deg, var(--gold-dim) 0%, var(--gold-dim) var(--pct, 50%), rgba(0,0,0,0.4) var(--pct, 50%), rgba(0,0,0,0.4) 100%);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type="range"].themed::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, var(--gold-bright) 0%, var(--gold) 100%);
+    border: 1px solid var(--bg-deep);
+    cursor: grab;
+    box-shadow: 0 0 6px rgba(230, 200, 120, 0.4);
+  }
+
+  input[type="range"].themed::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, var(--gold-bright) 0%, var(--gold) 100%);
+    border: 1px solid var(--bg-deep);
+    cursor: grab;
+    box-shadow: 0 0 6px rgba(230, 200, 120, 0.4);
+  }
+
+  /* Stat-specific accent colors on icon */
+  .stat-card[data-stat="hp"] .stat-icon { color: var(--c-hp); }
+  .stat-card[data-stat="attack"] .stat-icon { color: var(--c-attack); }
+  .stat-card[data-stat="defense"] .stat-icon { color: var(--c-defense); }
+  .stat-card[data-stat="damage"] .stat-icon { color: var(--c-damage); }
+
+  /* ---------- STRIKE BUTTON ---------- */
+
+  .strike-btn {
+    background: linear-gradient(180deg, #4a1e1e 0%, #2a0e0e 100%);
+    border: 1px solid var(--c-danger);
+    color: #f4d4cf;
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 12px 28px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255,255,255,0.05);
+    min-width: 200px;
+  }
+
+  .strike-btn:hover:not(:disabled) {
+    background: linear-gradient(180deg, #6a2828 0%, #3a1414 100%);
+    box-shadow: 0 0 16px rgba(194, 85, 85, 0.4);
+    color: #fff;
+  }
+
+  .strike-btn:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  .strike-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    filter: grayscale(0.7);
+  }
+
+  /* ---------- VS / CENTER ---------- */
+
+  .vs-pillar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0 12px;
+    min-width: 80px;
+    height: 100%;
+    padding-top: 80px;
+  }
+
+  .vs-glyph {
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--gold-dim);
+    letter-spacing: 0.1em;
+    opacity: 0.7;
+    margin-bottom: 8px;
+  }
+
+  .vs-ornament {
+    width: 2px;
+    height: 200px;
+    background: linear-gradient(180deg, transparent, var(--gold-faint), transparent);
+  }
+
+  /* ---------- BATTLE SEQUENCE BAR ---------- */
+
+  .battle-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin: 20px 0;
+  }
+
+  .battle-sequence-btn {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    max-width: 720px;
+    background: linear-gradient(180deg, var(--bg-panel-2) 0%, var(--bg-panel) 100%);
+    border: 1px solid var(--gold);
+    border-radius: 3px;
+    overflow: hidden;
+    box-shadow: var(--shadow-deep);
+    user-select: none;
+  }
+
+  .seq-arrow {
+    background: rgba(0, 0, 0, 0.25);
+    border: none;
+    padding: 16px 24px;
+    color: var(--cream-dim);
+    font-size: 22px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 70px;
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+  }
+
+  .seq-arrow:hover {
+    background: rgba(201, 165, 89, 0.15);
+    color: var(--cream);
+  }
+
+  .seq-arrow.active {
+    background: linear-gradient(180deg, var(--gold-bright) 0%, var(--gold) 100%);
+    color: var(--bg-deep);
+    box-shadow: inset 0 0 16px rgba(0,0,0,0.2);
+  }
+
+  .seq-arrow.active:hover {
+    background: linear-gradient(180deg, var(--gold-bright) 0%, var(--gold) 100%);
+  }
+
+  .seq-center {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--gold-bright);
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    cursor: pointer;
+    padding: 16px;
+    transition: all 0.2s ease;
+    border-left: 1px solid var(--gold-faint);
+    border-right: 1px solid var(--gold-faint);
+    position: relative;
+  }
+
+  .seq-center:hover:not(:disabled) {
+    background: rgba(230, 200, 120, 0.08);
+    color: var(--cream);
+    text-shadow: 0 0 12px rgba(230, 200, 120, 0.5);
+  }
+
+  .seq-center:disabled {
+    color: var(--gold-dim);
+    cursor: not-allowed;
+  }
+
+  .seq-center .next-hint {
+    display: block;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    color: var(--cream-dim);
+    margin-top: 2px;
+    text-transform: none;
+    font-style: italic;
+    text-shadow: none;
+  }
+
+  .reset-btn {
+    background: transparent;
+    border: 1px solid var(--gold-dim);
+    color: var(--cream-dim);
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 8px 24px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.2s ease;
+  }
+
+  .reset-btn:hover {
+    border-color: var(--gold);
+    color: var(--cream);
+    background: rgba(201, 165, 89, 0.08);
+  }
+
+  /* ---------- BATTLE LOG ---------- */
+
+  .battle-log {
+    background: linear-gradient(180deg, rgba(15, 29, 56, 0.6) 0%, rgba(6, 16, 31, 0.6) 100%);
+    border: 1px solid var(--gold-faint);
+    border-radius: 3px;
+    padding: 16px 20px;
+    max-height: 240px;
+    overflow-y: auto;
+    box-shadow: var(--shadow-soft);
+  }
+
+  .battle-log-header {
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.25em;
+    color: var(--gold-bright);
+    text-transform: uppercase;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--gold-faint);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .battle-log-clear {
+    background: none;
+    border: none;
+    color: var(--cream-dim);
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 2px;
+    letter-spacing: 0.05em;
+    text-transform: none;
+    font-weight: 500;
+  }
+
+  .battle-log-clear:hover {
+    color: var(--gold-bright);
+    background: rgba(201, 165, 89, 0.08);
+  }
+
+  .log-entry {
+    font-size: 15px;
+    line-height: 1.5;
+    margin: 4px 0;
+    padding-left: 12px;
+    border-left: 2px solid transparent;
+    transition: border-color 0.2s ease;
+  }
+
+  .log-entry.left-attack { border-left-color: var(--c-attack); }
+  .log-entry.right-attack { border-left-color: var(--c-defense); }
+  .log-entry.system { border-left-color: var(--gold); color: var(--gold-bright); font-style: italic; }
+  .log-entry.victory { border-left-color: var(--c-win); color: var(--c-win); font-weight: 600; font-style: italic; padding: 8px 0 8px 12px; }
+
+  .log-entry .actor-left { color: var(--c-attack); font-weight: 600; }
+  .log-entry .actor-right { color: var(--c-defense); font-weight: 600; }
+  .log-entry .dmg { color: var(--gold-bright); font-weight: 700; font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif; }
+  .log-entry .killed { color: var(--c-danger); font-weight: 600; }
+  .log-entry .formula { color: var(--cream-dim); font-size: 12px; font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif; margin-left: 8px; }
+
+  .battle-log::-webkit-scrollbar { width: 8px; }
+  .battle-log::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+  .battle-log::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 1px; }
+  .battle-log::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+
+  .log-empty {
+    color: var(--muted);
+    font-style: italic;
+    text-align: center;
+    padding: 24px 0;
+    font-size: 14px;
+  }
+
+  /* ---------- TABLE & INFO VIEW ---------- */
+
+  .info-section {
+    background: linear-gradient(180deg, rgba(15, 29, 56, 0.6) 0%, rgba(6, 16, 31, 0.5) 100%);
+    border: 1px solid var(--gold-faint);
+    border-radius: 3px;
+    padding: 24px 28px;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow-soft);
+  }
+
+  .info-section h2 {
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.25em;
+    color: var(--gold-bright);
+    text-transform: uppercase;
+    margin: 0 0 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--gold-faint);
+  }
+
+  .info-section p {
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--cream);
+    margin: 8px 0;
+  }
+
+  .formula-box {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--gold-dim);
+    border-radius: 2px;
+    padding: 14px 18px;
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 14px;
+    color: var(--gold-bright);
+    margin: 12px 0;
+    overflow-x: auto;
+    line-height: 1.7;
+    white-space: pre;
+  }
+
+  .formula-box .var-atk { color: var(--c-attack); font-weight: 700; }
+  .formula-box .var-def { color: var(--c-defense); font-weight: 700; }
+  .formula-box .var-stack { color: var(--c-stack); font-weight: 700; }
+  .formula-box .var-dmg { color: var(--c-damage); font-weight: 700; }
+  .formula-box .comment { color: var(--muted); font-style: italic; }
+
+  .mod-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 12px;
+  }
+
+  .mod-table th, .mod-table td {
+    padding: 6px 8px;
+    text-align: center;
+    border: 1px solid rgba(201, 165, 89, 0.15);
+  }
+
+  .mod-table th {
+    background: rgba(28, 48, 90, 0.5);
+    color: var(--gold-bright);
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    font-size: 11px;
+  }
+
+  .mod-table th.corner {
+    background: rgba(0,0,0,0.4);
+  }
+  .mod-table th.corner .axis-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+  }
+  .mod-table th.corner .axis-label .atk { color: var(--c-attack); }
+  .mod-table th.corner .axis-label .def { color: var(--c-defense); }
+
+  .mod-table td {
+    color: var(--cream);
+    transition: background 0.15s ease;
+  }
+
+  .mod-table td:hover {
+    background: rgba(230, 200, 120, 0.1);
+    color: var(--gold-bright);
+  }
+
+  .mod-table td.diag { background: rgba(201, 165, 89, 0.08); font-weight: 600; }
+
+  .mod-table .row-label {
+    background: rgba(28, 48, 90, 0.4);
+    color: var(--c-defense);
+    font-weight: 600;
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 11px;
+  }
+
+  /* Negative / positive damage modifier coloring */
+  .mod-neg-3 { background: rgba(90, 143, 196, 0.25); }
+  .mod-neg-2 { background: rgba(90, 143, 196, 0.18); }
+  .mod-neg-1 { background: rgba(90, 143, 196, 0.10); }
+  .mod-pos-1 { background: rgba(212, 101, 74, 0.10); }
+  .mod-pos-2 { background: rgba(212, 101, 74, 0.18); }
+  .mod-pos-3 { background: rgba(212, 101, 74, 0.25); }
+  .mod-pos-4 { background: rgba(212, 101, 74, 0.35); }
+
+  .modifier-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 12px;
+  }
+
+  .mod-card {
+    background: rgba(28, 48, 90, 0.4);
+    border: 1px solid var(--gold-faint);
+    border-radius: 2px;
+    padding: 12px 16px;
+  }
+
+  .mod-card-title {
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--gold-bright);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .mod-card-formula {
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 12px;
+    color: var(--cream);
+    line-height: 1.6;
+  }
+
+  .notes-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .notes-list li {
+    font-size: 15px;
+    line-height: 1.55;
+    padding: 8px 0 8px 22px;
+    position: relative;
+    border-bottom: 1px dashed rgba(201, 165, 89, 0.12);
+  }
+
+  .notes-list li:last-child { border-bottom: none; }
+
+  .notes-list li::before {
+    content: '◆';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    color: var(--gold);
+    font-size: 10px;
+  }
+
+  /* ---------- HELP MODAL ---------- */
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(6, 16, 31, 0.85);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+
+  .modal-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .modal {
+    background: linear-gradient(180deg, var(--bg-panel-2) 0%, var(--bg-panel) 100%);
+    border: 1px solid var(--gold);
+    border-radius: 3px;
+    max-width: 640px;
+    width: 90%;
+    max-height: 86vh;
+    overflow-y: auto;
+    padding: 28px 32px;
+    box-shadow: var(--shadow-deep), 0 0 60px rgba(230, 200, 120, 0.15);
+    position: relative;
+  }
+
+  .modal h2 {
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 16px;
+    color: var(--gold-bright);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin: 0 0 8px;
+    text-align: center;
+  }
+
+  .modal .modal-subtitle {
+    text-align: center;
+    color: var(--cream-dim);
+    font-style: italic;
+    margin-bottom: 20px;
+    font-size: 14px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--gold-faint);
+  }
+
+  .modal-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: transparent;
+    border: 1px solid var(--gold-dim);
+    color: var(--cream-dim);
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-close:hover {
+    background: var(--gold);
+    color: var(--bg-deep);
+    border-color: var(--gold);
+  }
+
+  .help-item {
+    margin-bottom: 18px;
+    padding-left: 4px;
+  }
+
+  .help-item-title {
+    font-family: 'Lora', Georgia, 'Palatino Linotype', Palatino, serif;
+    font-size: 12px;
+    color: var(--gold-bright);
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .help-item-body {
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--cream);
+  }
+
+  /* ---------- VIEW VISIBILITY ---------- */
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* ---------- RESPONSIVE ---------- */
+
+  @media (max-width: 920px) {
+    .arena {
+      grid-template-columns: 1fr;
+      gap: 32px;
+    }
+    .vs-pillar { display: none; }
+    .unit-row { flex-wrap: wrap; }
+    .modifier-grid { grid-template-columns: 1fr; }
+    #app { padding: 16px; }
+  }
+
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- =================================================== -->
+  <!-- HEADER                                              -->
+  <!-- =================================================== -->
+  <header class="top-bar">
+    <nav class="tabs">
+      <button class="tab active" data-view="battle">Battle</button>
+      <button class="tab" data-view="table">Table &amp; Information</button>
+    </nav>
+    <div class="title-sigil">
+      <span class="ornament">◆</span>Olden Era Damage Simulator<span class="ornament">◆</span>
+    </div>
+    <button class="help-btn" id="helpBtn" title="How to use">?</button>
+  </header>
+
+  <!-- =================================================== -->
+  <!-- BATTLE VIEW                                          -->
+  <!-- =================================================== -->
+  <section class="view active" id="view-battle">
+
+    <div class="arena">
+
+      <!-- LEFT UNIT -->
+      <div class="unit-side left" data-side="left">
+
+        <div class="unit-row">
+          <div class="stats-panel" data-side-stats="left"><div class="stat-card expanded" data-stat="hp" data-side="left">
+      <div class="stat-header">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7-4.5-9.5-9C1 9 2.5 5 6.5 5c2 0 3.5 1 5.5 3 2-2 3.5-3 5.5-3 4 0 5.5 4 4 7-2.5 4.5-9.5 9-9.5 9z"></path></svg></div>
+        <div class="stat-body">
+          <div class="stat-label">HP</div>
+          <div class="stat-value-row">
+        <input type="number" class="stat-input" min="0" max="1000" value="600" data-stat-input="maxHP">
+      </div>
+        </div>
+      </div>
+      
+        <div class="slider-container">
+          <div class="slider-row">
+            <input type="range" class="themed" min="0" max="1000" value="600" data-slider="maxHP" style="--pct: 60%">
+          </div>
+        </div>
+      
+    </div><div class="stat-card" data-stat="attack" data-side="left">
+      <div class="stat-header">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5"></path><path d="M13 19l6-6"></path><path d="M16 16l4 4"></path><path d="M19 21l2-2"></path></svg></div>
+        <div class="stat-body">
+          <div class="stat-label">Attack</div>
+          <div class="stat-value-row">
+        <input type="number" class="stat-input" min="0" max="200" value="10" data-stat-input="attack">
+      </div>
+        </div>
+      </div>
+      
+        <div class="slider-container">
+          <div class="slider-row">
+            <input type="range" class="themed" min="0" max="200" value="10" data-slider="attack" style="--pct: 5%">
+          </div>
+        </div>
+      
+    </div><div class="stat-card" data-stat="defense" data-side="left">
+      <div class="stat-header">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l8 4v6c0 5-3.5 9.5-8 10-4.5-.5-8-5-8-10V6l8-4z"></path></svg></div>
+        <div class="stat-body">
+          <div class="stat-label">Defense</div>
+          <div class="stat-value-row">
+        <input type="number" class="stat-input" min="0" max="200" value="5" data-stat-input="defense">
+      </div>
+        </div>
+      </div>
+      
+        <div class="slider-container">
+          <div class="slider-row">
+            <input type="range" class="themed" min="0" max="200" value="5" data-slider="defense" style="--pct: 2.5%">
+          </div>
+        </div>
+      
+    </div><div class="stat-card" data-stat="damage" data-side="left">
+      <div class="stat-header">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13,2 3,14 12,14 11,22 21,10 12,10"></polygon></svg></div>
+        <div class="stat-body">
+          <div class="stat-label">Damage</div>
+          <div class="stat-value-row">
+        <input type="number" class="stat-input stat-range-input" min="0" max="500" value="1" data-stat-input="dmgMin">
+        <span class="stat-range-sep">—</span>
+        <input type="number" class="stat-input stat-range-input" min="0" max="500" value="3" data-stat-input="dmgMax">
+      </div>
+        </div>
+      </div>
+      
+        <div class="slider-container">
+          <div class="slider-row">
+            <span class="slider-mini-label">Min</span>
+            <input type="range" class="themed" min="0" max="500" value="1" data-slider="dmgMin" style="--pct: 0.2%">
+          </div>
+          <div class="slider-row">
+            <span class="slider-mini-label">Max</span>
+            <input type="range" class="themed" min="0" max="500" value="3" data-slider="dmgMax" style="--pct: 0.6%">
+          </div>
+        </div>
+      
+    </div></div>
+          <div class="unit-column">
+
+            <div class="stack-badge">
+              <div class="stack-badge-label">Stack</div>
+              <input type="number" min="0" max="9999" data-stat-input="stack" value="5">
+            </div>
+
+            <div class="unit-figure-wrap">
+              <div class="hp-bar-text" data-hp-text="left">600 / 600</div>
+              <div class="hp-bar-outer"><div class="hp-bar-fill" data-hp-fill="left" style="width: 100%; background: linear-gradient(90deg, rgb(95, 160, 95), rgb(122, 184, 122));"></div></div>
+              <svg class="unit-svg" data-unit-svg="left" viewBox="0 0 160 220" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="bodyGradL" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="#3a4f7a"></stop>
+                    <stop offset="40%" stop-color="#5a7099"></stop>
+                    <stop offset="60%" stop-color="#5a7099"></stop>
+                    <stop offset="100%" stop-color="#2a3a5a"></stop>
+                  </linearGradient>
+                  <linearGradient id="headGradL" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#6a82ab"></stop>
+                    <stop offset="100%" stop-color="#3a4f7a"></stop>
+                  </linearGradient>
+                  <radialGradient id="handGradL" cx="35%" cy="35%">
+                    <stop offset="0%" stop-color="#7a92bb"></stop>
+                    <stop offset="100%" stop-color="#3a4f7a"></stop>
+                  </radialGradient>
+                </defs>
+                <!-- Hands (behind body) -->
+                <circle cx="22" cy="135" r="11" fill="url(#handGradL)" stroke="#c9a559" stroke-width="1.5"></circle>
+                <circle cx="138" cy="135" r="11" fill="url(#handGradL)" stroke="#c9a559" stroke-width="1.5"></circle>
+                <!-- Body: cylinder = ellipse top + rect + ellipse bottom -->
+                <ellipse cx="80" cy="80" rx="42" ry="10" fill="#6a82ab" stroke="#c9a559" stroke-width="1.5"></ellipse>
+                <rect x="38" y="80" width="84" height="115" fill="url(#bodyGradL)" stroke="#c9a559" stroke-width="1.5"></rect>
+                <ellipse cx="80" cy="195" rx="42" ry="10" fill="#2a3a5a" stroke="#c9a559" stroke-width="1.5"></ellipse>
+                <!-- subtle vertical highlight -->
+                <line x1="62" y1="80" x2="62" y2="195" stroke="rgba(255,255,255,0.1)" stroke-width="2"></line>
+                <!-- Head -->
+                <circle cx="80" cy="48" r="24" fill="url(#headGradL)" stroke="#c9a559" stroke-width="2"></circle>
+              </svg>
+            </div>
+
+            <button class="strike-btn" data-strike="left">Strike →</button>
+
+          </div>
+        </div>
+
+      </div>
+
+      <!-- CENTER -->
+      <div class="vs-pillar">
+        <div class="vs-glyph">VS</div>
+        <div class="vs-ornament"></div>
+      </div>
+
+      <!-- RIGHT UNIT -->
+      <div class="unit-side right" data-side="right">
+
+        <div class="unit-row">
+          <div class="stats-panel" data-side-stats="right"><div class="stat-card" data-stat="hp" data-side="right">
+      <div class="stat-header">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7-4.5-9.5-9C1 9 2.5 5 6.5 5c2 0 3.5 1 5.5 3 2-2 3.5-3 5.5-3 4 0 5.5 4 4 7-2.5 4.5-9.5 9-9.5 9z"></path></svg></div>
+        <div class="stat-body">
+          <div class="stat-label">HP</div>
+          <div class="stat-value-row">
+        <input type="number" class="stat-input" min="0" max="1000" value="100" data-stat-input="maxHP">
+      </div>
+        </div>
+      </div>
+      
+        <div class="slider-container">
+          <div class="slider-row">
+            <input type="range" class="themed" min="0" max="1000" value="100" data-slider="maxHP" style="--pct: 10%">
+          </div>
+        </div>
+      
+    </div><div class="stat-card" data-stat="attack" data-side="right">
+      <div class="stat-header">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5"></path><path d="M13 19l6-6"></path><path d="M16 16l4 4"></path><path d="M19 21l2-2"></path></svg></div>
+        <div class="stat-body">
+          <div class="stat-label">Attack</div>
+          <div class="stat-value-row">
+        <input type="number" class="stat-input" min="0" max="200" value="8" data-stat-input="attack">
+      </div>
+        </div>
+      </div>
+      
+        <div class="slider-container">
+          <div class="slider-row">
+            <input type="range" class="themed" min="0" max="200" value="8" data-slider="attack" style="--pct: 4%">
+          </div>
+        </div>
+      
+    </div><div class="stat-card" data-stat="defense" data-side="right">
+      <div class="stat-header">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l8 4v6c0 5-3.5 9.5-8 10-4.5-.5-8-5-8-10V6l8-4z"></path></svg></div>
+        <div class="stat-body">
+          <div class="stat-label">Defense</div>
+          <div class="stat-value-row">
+        <input type="number" class="stat-input" min="0" max="200" value="8" data-stat-input="defense">
+      </div>
+        </div>
+      </div>
+      
+        <div class="slider-container">
+          <div class="slider-row">
+            <input type="range" class="themed" min="0" max="200" value="8" data-slider="defense" style="--pct: 4%">
+          </div>
+        </div>
+      
+    </div><div class="stat-card" data-stat="damage" data-side="right">
+      <div class="stat-header">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13,2 3,14 12,14 11,22 21,10 12,10"></polygon></svg></div>
+        <div class="stat-body">
+          <div class="stat-label">Damage</div>
+          <div class="stat-value-row">
+        <input type="number" class="stat-input stat-range-input" min="0" max="500" value="5" data-stat-input="dmgMin">
+        <span class="stat-range-sep">—</span>
+        <input type="number" class="stat-input stat-range-input" min="0" max="500" value="8" data-stat-input="dmgMax">
+      </div>
+        </div>
+      </div>
+      
+        <div class="slider-container">
+          <div class="slider-row">
+            <span class="slider-mini-label">Min</span>
+            <input type="range" class="themed" min="0" max="500" value="5" data-slider="dmgMin" style="--pct: 1%">
+          </div>
+          <div class="slider-row">
+            <span class="slider-mini-label">Max</span>
+            <input type="range" class="themed" min="0" max="500" value="8" data-slider="dmgMax" style="--pct: 1.6%">
+          </div>
+        </div>
+      
+    </div></div>
+          <div class="unit-column">
+
+            <div class="stack-badge">
+              <div class="stack-badge-label">Stack</div>
+              <input type="number" min="0" max="9999" data-stat-input="stack" value="10">
+            </div>
+
+            <div class="unit-figure-wrap">
+              <div class="hp-bar-text" data-hp-text="right">100 / 100</div>
+              <div class="hp-bar-outer"><div class="hp-bar-fill" data-hp-fill="right" style="width: 100%; background: linear-gradient(90deg, rgb(95, 160, 95), rgb(122, 184, 122));"></div></div>
+              <svg class="unit-svg" data-unit-svg="right" viewBox="0 0 160 220" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="bodyGradR" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="#7a4a3a"></stop>
+                    <stop offset="40%" stop-color="#9a6a55"></stop>
+                    <stop offset="60%" stop-color="#9a6a55"></stop>
+                    <stop offset="100%" stop-color="#5a3525"></stop>
+                  </linearGradient>
+                  <linearGradient id="headGradR" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#ab7a65"></stop>
+                    <stop offset="100%" stop-color="#7a4a3a"></stop>
+                  </linearGradient>
+                  <radialGradient id="handGradR" cx="35%" cy="35%">
+                    <stop offset="0%" stop-color="#bb8a75"></stop>
+                    <stop offset="100%" stop-color="#7a4a3a"></stop>
+                  </radialGradient>
+                </defs>
+                <circle cx="22" cy="135" r="11" fill="url(#handGradR)" stroke="#c9a559" stroke-width="1.5"></circle>
+                <circle cx="138" cy="135" r="11" fill="url(#handGradR)" stroke="#c9a559" stroke-width="1.5"></circle>
+                <ellipse cx="80" cy="80" rx="42" ry="10" fill="#ab7a65" stroke="#c9a559" stroke-width="1.5"></ellipse>
+                <rect x="38" y="80" width="84" height="115" fill="url(#bodyGradR)" stroke="#c9a559" stroke-width="1.5"></rect>
+                <ellipse cx="80" cy="195" rx="42" ry="10" fill="#5a3525" stroke="#c9a559" stroke-width="1.5"></ellipse>
+                <line x1="62" y1="80" x2="62" y2="195" stroke="rgba(255,255,255,0.1)" stroke-width="2"></line>
+                <circle cx="80" cy="48" r="24" fill="url(#headGradR)" stroke="#c9a559" stroke-width="2"></circle>
+              </svg>
+            </div>
+
+            <button class="strike-btn" data-strike="right">← Strike</button>
+
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- Battle Sequence Controls -->
+    <div class="battle-controls">
+      <div class="battle-sequence-btn">
+        <button class="seq-arrow" data-seq-arrow="left" title="Left unit strikes first">◀</button>
+        <button class="seq-center" id="seqCenter" disabled="disabled">
+          Battle Sequence
+          <span class="next-hint" id="seqHint">Choose who strikes first</span>
+        </button>
+        <button class="seq-arrow" data-seq-arrow="right" title="Right unit strikes first">▶</button>
+      </div>
+      <button class="reset-btn" id="resetSeq">Reset Sequence</button>
+    </div>
+
+    <!-- Battle Log -->
+    <div class="battle-log">
+      <div class="battle-log-header">
+        <span>Battle Log</span>
+        <button class="battle-log-clear" id="logClear">Clear</button>
+      </div>
+      <div id="logBody"><div class="log-entry system"><em>Sequence reset — both stacks restored (Left 5, Right 10) at full HP.</em></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">13</span> damage <span style="color:var(--cream-dim); font-size:13px;">(9 remain, top HP 50/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">9</span> damage <span style="color:var(--cream-dim); font-size:13px;">(9 remain, top HP 63/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">14</span> damage <span style="color:var(--cream-dim); font-size:13px;">(9 remain, top HP 72/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">13</span> damage <span style="color:var(--cream-dim); font-size:13px;">(9 remain, top HP 86/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">13</span> damage <span class="killed">— 1 slain</span> <span style="color:var(--cream-dim); font-size:13px;">(9 remain, top HP 99/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">8</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 12/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">11</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 20/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">9</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 31/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">12</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 40/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry right-attack"><span class="actor-right">Right</span> strikes <span class="actor-left">Left</span> for <span class="dmg">88</span> damage <span style="color:var(--cream-dim); font-size:13px;">(5 remain, top HP 377/600)</span><div class="formula">(20+8)/(20+5) = 1.120 × 10 × 5–8 → 56–90</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">11</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 52/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">16</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 63/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry right-attack"><span class="actor-right">Right</span> strikes <span class="actor-left">Left</span> for <span class="dmg">73</span> damage <span style="color:var(--cream-dim); font-size:13px;">(5 remain, top HP 465/600)</span><div class="formula">(20+8)/(20+5) = 1.120 × 10 × 5–8 → 56–90</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">12</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 79/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">9</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 91/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry right-attack"><span class="actor-right">Right</span> strikes <span class="actor-left">Left</span> for <span class="dmg">62</span> damage <span style="color:var(--cream-dim); font-size:13px;">(5 remain, top HP 538/600)</span><div class="formula">(20+8)/(20+5) = 1.120 × 10 × 5–8 → 56–90</div></div><div class="log-entry system"><em>Sequence reset — both stacks restored (Left 5, Right 10) at full HP.</em></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">12</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 72/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">16</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 84/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry system"><em>Sequence reset — both stacks restored (Left 5, Right 10) at full HP.</em></div><div class="log-entry right-attack"><span class="actor-right">Right</span> strikes <span class="actor-left">Left</span> for <span class="dmg">86</span> damage <span style="color:var(--cream-dim); font-size:13px;">(5 remain, top HP 193/500)</span><div class="formula">(20+8)/(20+5) = 1.120 × 10 × 5–8 → 56–90</div></div><div class="log-entry right-attack"><span class="actor-right">Right</span> strikes <span class="actor-left">Left</span> for <span class="dmg">88</span> damage <span style="color:var(--cream-dim); font-size:13px;">(5 remain, top HP 279/500)</span><div class="formula">(20+8)/(20+5) = 1.120 × 10 × 5–8 → 56–90</div></div><div class="log-entry right-attack"><span class="actor-right">Right</span> strikes <span class="actor-left">Left</span> for <span class="dmg">71</span> damage <span style="color:var(--cream-dim); font-size:13px;">(5 remain, top HP 367/500)</span><div class="formula">(20+8)/(20+5) = 1.120 × 10 × 5–8 → 56–90</div></div><div class="log-entry right-attack"><span class="actor-right">Right</span> strikes <span class="actor-left">Left</span> for <span class="dmg">62</span> damage <span style="color:var(--cream-dim); font-size:13px;">(5 remain, top HP 438/500)</span><div class="formula">(20+8)/(20+5) = 1.120 × 10 × 5–8 → 56–90</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">16</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 84/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry system"><em>Sequence reset — both stacks restored (Left 5, Right 10) at full HP.</em></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">14</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 86/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry system"><em>Sequence reset — both stacks restored (Left 5, Right 10) at full HP.</em></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">11</span> damage <span style="color:var(--cream-dim); font-size:13px;">(9 remain, top HP 42/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">10</span> damage <span style="color:var(--cream-dim); font-size:13px;">(9 remain, top HP 53/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">10</span> damage <span style="color:var(--cream-dim); font-size:13px;">(9 remain, top HP 63/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">6</span> damage <span style="color:var(--cream-dim); font-size:13px;">(9 remain, top HP 73/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">7</span> damage <span style="color:var(--cream-dim); font-size:13px;">(9 remain, top HP 79/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">8</span> damage <span style="color:var(--cream-dim); font-size:13px;">(9 remain, top HP 86/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">15</span> damage <span class="killed">— 1 slain</span> <span style="color:var(--cream-dim); font-size:13px;">(9 remain, top HP 94/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">7</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 9/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">14</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 16/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">11</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 30/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">15</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 41/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">16</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 56/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">12</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 72/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div><div class="log-entry left-attack"><span class="actor-left">Left</span> strikes <span class="actor-right">Right</span> for <span class="dmg">16</span> damage <span style="color:var(--cream-dim); font-size:13px;">(10 remain, top HP 84/100)</span><div class="formula">(20+10)/(20+8) = 1.071 × 5 × 1–3 → 5–16</div></div></div>
+    </div>
+
+  </section>
+
+  <!-- =================================================== -->
+  <!-- TABLE & INFORMATION VIEW                            -->
+  <!-- =================================================== -->
+  <section class="view" id="view-table">
+
+    <div class="info-section">
+      <h2>The Damage Formula</h2>
+      <p>When a creature attacks another, damage scales upward with the attacker's <strong style="color:var(--c-attack)">Attack</strong> and downward with the defender's <strong style="color:var(--c-defense)">Defense</strong>. The hero's own Attack and Defense are added on top of the creature's own values before the calculation runs.</p>
+
+      <div class="formula-box">
+<span class="comment">// Basic damage modifier — two equivalent forms:</span>
+modifier = (1 + 5% × <span class="var-atk">ATK</span>) / (1 + 5% × <span class="var-def">DEF</span>)
+modifier = (20 + <span class="var-atk">ATK</span>) / (20 + <span class="var-def">DEF</span>)
+
+<span class="comment">// Damage delta (how much the modifier shifts base damage):</span>
+delta = (1 + 5% × <span class="var-atk">ATK</span>) / (1 + 5% × <span class="var-def">DEF</span>) − 1
+      </div>
+
+      <p style="color: var(--cream-dim); font-size: 14px; font-style: italic;">Example
+ from the source: a Swordsman (ATK 4) striking a Skeleton (DEF 1) gets a
+ modifier of (20+4)/(20+1) = 1.14. Swordsman base damage 2–3 becomes 
+2.28–3.42, rounded by standard rules (≥.5 up, &lt;.5 down).</p>
+    </div>
+
+    <div class="info-section">
+      <h2>Attack / Defense Modifier Table</h2>
+      <p style="font-size: 14px; color: var(--cream-dim);">Each cell is the <em>damage delta</em>: a modifier of <strong style="color:var(--c-attack)">+0.50</strong> means +50% damage; <strong style="color:var(--c-defense)">−0.33</strong> means damage is reduced by a third. Hover any cell to read it clearly.</p>
+      <div style="overflow-x: auto; margin-top: 16px;">
+        <table class="mod-table" id="modTable"><thead><tr><th class="corner"><div class="axis-label"><span class="def">DEF ↓</span><span class="atk">ATK →</span></div></th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>10</th><th>15</th><th>20</th><th>25</th><th>30</th><th>35</th><th>40</th></tr></thead><tbody><tr><td class="row-label">0</td><td class=" diag">0</td><td class="mod-pos-1">+0.05</td><td class="mod-pos-1">+0.10</td><td class="mod-pos-1">+0.15</td><td class="mod-pos-1">+0.20</td><td class="mod-pos-1">+0.25</td><td class="mod-pos-2">+0.50</td><td class="mod-pos-3">+0.75</td><td class="mod-pos-3">+1.00</td><td class="mod-pos-4">+1.25</td><td class="mod-pos-4">+1.50</td><td class="mod-pos-4">+1.75</td><td class="mod-pos-4">+2.00</td></tr><tr><td class="row-label">1</td><td class="mod-neg-1">-0.05</td><td class=" diag">0</td><td class="mod-pos-1">+0.05</td><td class="mod-pos-1">+0.10</td><td class="mod-pos-1">+0.14</td><td class="mod-pos-1">+0.19</td><td class="mod-pos-2">+0.43</td><td class="mod-pos-3">+0.67</td><td class="mod-pos-3">+0.90</td><td class="mod-pos-4">+1.14</td><td class="mod-pos-4">+1.38</td><td class="mod-pos-4">+1.62</td><td class="mod-pos-4">+1.86</td></tr><tr><td class="row-label">2</td><td class="mod-neg-1">-0.09</td><td class="mod-neg-1">-0.05</td><td class=" diag">0</td><td class="mod-pos-1">+0.05</td><td class="mod-pos-1">+0.09</td><td class="mod-pos-1">+0.14</td><td class="mod-pos-2">+0.36</td><td class="mod-pos-3">+0.59</td><td class="mod-pos-3">+0.82</td><td class="mod-pos-4">+1.05</td><td class="mod-pos-4">+1.27</td><td class="mod-pos-4">+1.50</td><td class="mod-pos-4">+1.73</td></tr><tr><td class="row-label">3</td><td class="mod-neg-1">-0.13</td><td class="mod-neg-1">-0.09</td><td class="mod-neg-1">-0.04</td><td class=" diag">0</td><td class="mod-pos-1">+0.04</td><td class="mod-pos-1">+0.09</td><td class="mod-pos-2">+0.30</td><td class="mod-pos-3">+0.52</td><td class="mod-pos-3">+0.74</td><td class="mod-pos-3">+0.96</td><td class="mod-pos-4">+1.17</td><td class="mod-pos-4">+1.39</td><td class="mod-pos-4">+1.61</td></tr><tr><td class="row-label">4</td><td class="mod-neg-1">-0.17</td><td class="mod-neg-1">-0.12</td><td class="mod-neg-1">-0.08</td><td class="mod-neg-1">-0.04</td><td class=" diag">0</td><td class="mod-pos-1">+0.04</td><td class="mod-pos-1">+0.25</td><td class="mod-pos-2">+0.46</td><td class="mod-pos-3">+0.67</td><td class="mod-pos-3">+0.88</td><td class="mod-pos-4">+1.08</td><td class="mod-pos-4">+1.29</td><td class="mod-pos-4">+1.50</td></tr><tr><td class="row-label">5</td><td class="mod-neg-1">-0.20</td><td class="mod-neg-1">-0.16</td><td class="mod-neg-1">-0.12</td><td class="mod-neg-1">-0.08</td><td class="mod-neg-1">-0.04</td><td class=" diag">0</td><td class="mod-pos-1">+0.20</td><td class="mod-pos-2">+0.40</td><td class="mod-pos-3">+0.60</td><td class="mod-pos-3">+0.80</td><td class="mod-pos-3">+1.00</td><td class="mod-pos-4">+1.20</td><td class="mod-pos-4">+1.40</td></tr><tr><td class="row-label">10</td><td class="mod-neg-2">-0.33</td><td class="mod-neg-2">-0.30</td><td class="mod-neg-2">-0.27</td><td class="mod-neg-1">-0.23</td><td class="mod-neg-1">-0.20</td><td class="mod-neg-1">-0.17</td><td class=" diag">0</td><td class="mod-pos-1">+0.17</td><td class="mod-pos-2">+0.33</td><td class="mod-pos-2">+0.50</td><td class="mod-pos-3">+0.67</td><td class="mod-pos-3">+0.83</td><td class="mod-pos-3">+1.00</td></tr><tr><td class="row-label">15</td><td class="mod-neg-2">-0.43</td><td class="mod-neg-2">-0.40</td><td class="mod-neg-2">-0.37</td><td class="mod-neg-2">-0.34</td><td class="mod-neg-2">-0.31</td><td class="mod-neg-2">-0.29</td><td class="mod-neg-1">-0.14</td><td class=" diag">0</td><td class="mod-pos-1">+0.14</td><td class="mod-pos-2">+0.29</td><td class="mod-pos-2">+0.43</td><td class="mod-pos-3">+0.57</td><td class="mod-pos-3">+0.71</td></tr><tr><td class="row-label">20</td><td class="mod-neg-3">-0.50</td><td class="mod-neg-2">-0.47</td><td class="mod-neg-2">-0.45</td><td class="mod-neg-2">-0.43</td><td class="mod-neg-2">-0.40</td><td class="mod-neg-2">-0.37</td><td class="mod-neg-2">-0.25</td><td class="mod-neg-1">-0.12</td><td class=" diag">0</td><td class="mod-pos-1">+0.13</td><td class="mod-pos-1">+0.25</td><td class="mod-pos-2">+0.38</td><td class="mod-pos-2">+0.50</td></tr><tr><td class="row-label">25</td><td class="mod-neg-3">-0.56</td><td class="mod-neg-3">-0.53</td><td class="mod-neg-3">-0.51</td><td class="mod-neg-2">-0.49</td><td class="mod-neg-2">-0.47</td><td class="mod-neg-2">-0.44</td><td class="mod-neg-2">-0.33</td><td class="mod-neg-1">-0.22</td><td class="mod-neg-1">-0.11</td><td class=" diag">0</td><td class="mod-pos-1">+0.11</td><td class="mod-pos-1">+0.22</td><td class="mod-pos-2">+0.33</td></tr><tr><td class="row-label">30</td><td class="mod-neg-3">-0.60</td><td class="mod-neg-3">-0.58</td><td class="mod-neg-3">-0.56</td><td class="mod-neg-3">-0.54</td><td class="mod-neg-3">-0.52</td><td class="mod-neg-3">-0.50</td><td class="mod-neg-2">-0.40</td><td class="mod-neg-2">-0.30</td><td class="mod-neg-1">-0.20</td><td class="mod-neg-1">-0.10</td><td class=" diag">0</td><td class="mod-pos-1">+0.10</td><td class="mod-pos-1">+0.20</td></tr><tr><td class="row-label">35</td><td class="mod-neg-3">-0.64</td><td class="mod-neg-3">-0.62</td><td class="mod-neg-3">-0.60</td><td class="mod-neg-3">-0.58</td><td class="mod-neg-3">-0.56</td><td class="mod-neg-3">-0.55</td><td class="mod-neg-2">-0.45</td><td class="mod-neg-2">-0.36</td><td class="mod-neg-2">-0.27</td><td class="mod-neg-1">-0.18</td><td class="mod-neg-1">-0.09</td><td class=" diag">0</td><td class="mod-pos-1">+0.09</td></tr><tr><td class="row-label">40</td><td class="mod-neg-3">-0.67</td><td class="mod-neg-3">-0.65</td><td class="mod-neg-3">-0.63</td><td class="mod-neg-3">-0.62</td><td class="mod-neg-3">-0.60</td><td class="mod-neg-3">-0.58</td><td class="mod-neg-3">-0.50</td><td class="mod-neg-2">-0.42</td><td class="mod-neg-2">-0.33</td><td class="mod-neg-2">-0.25</td><td class="mod-neg-1">-0.17</td><td class="mod-neg-1">-0.08</td><td class=" diag">0</td></tr></tbody></table>
+      </div>
+    </div>
+
+    <div class="info-section">
+      <h2>Common Modifier Stack</h2>
+      <div class="modifier-grid">
+        <div class="mod-card">
+          <div class="mod-card-title">Basic Modifier</div>
+          <div class="mod-card-formula">(20 + ATK) / (20 + DEF)</div>
+        </div>
+        <div class="mod-card">
+          <div class="mod-card-title">+ Offense Skill</div>
+          <div class="mod-card-formula">BASIC × [1.10, 1.15, 1.20]<br><span style="color:var(--muted)">(Basic / Advanced / Expert: +10/15/20%)</span></div>
+        </div>
+        <div class="mod-card">
+          <div class="mod-card-title">+ Defense Skill (target)</div>
+          <div class="mod-card-formula">BASIC × [0.85, 0.80, 0.75]<br><span style="color:var(--muted)">(−15 / −20 / −25%)</span></div>
+        </div>
+        <div class="mod-card">
+          <div class="mod-card-title">Full Formula</div>
+          <div class="mod-card-formula" style="font-size: 11px;">(20+ATK)/(20+DEF) × Bonus₁ × Bonus₂ × ... × Crit</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-section">
+      <h2>Total Damage — All Factors</h2>
+      <div class="formula-box">
+<span class="var-stack">UnitCount</span> × <span class="var-dmg">UnitDamage</span> × A/D-Modifier × AllTypeMods × TagBasedMods × OtherIndependent × Luck
+      </div>
+      <ul class="notes-list">
+        <li><strong>All-Type Damage Modifiers</strong> — affect every damage source. e.g. Radiant Armor, Naira's Way, Adaptation (Scorpion ability).</li>
+        <li><strong>Tag-Based Damage</strong> — affect specific damage types only. e.g. Offense / Defense skills, Blessing, Favorable Wind, Optical Illusion. <em>Rule of thumb: if the effect names a damage type, it's tag-based; if not, it's all-type.</em></li>
+        <li><strong>Other Independent</strong> — range penalty, wall reduction, anti-summon damage, Apex Predator (Reaver), Jousting Bonus (Cavalry), Luck.</li>
+        <li>Attack / Defense modifier has <strong>no upper limit</strong>, lower limit of 0.</li>
+        <li>All-Type damage reduction has <strong>no upper limit</strong>.</li>
+        <li>Tag-based bonuses/reductions are <strong>added within a category</strong>, then <strong>multiplied across categories</strong>. Minimum result is <strong>10%</strong> of incoming damage.</li>
+        <li>Tag-based modifiers for attackers and defenders are calculated <strong>separately</strong>.</li>
+        <li>Final damage is always <strong>at least 1 point</strong>, regardless of adjustments.</li>
+        <li>This simulator implements the <strong>Basic Modifier</strong>
+ only — i.e. the Attack/Defense interaction at the core of every damage 
+calculation. Skill bonuses and tag effects are out of scope.</li>
+      </ul>
+    </div>
+
+    <div class="info-section">
+      <h2>Worked Example — Tag-Based Cap</h2>
+      <p style="font-size: 14px; color: var(--cream-dim);">100 Archangels strike Animated Armor. Initial A/D modifier: (36+20)/(12+20) = <strong style="color:var(--gold-bright)">1.75</strong>. Archangel damage 50–75.</p>
+      <div class="formula-box">
+(100) × (50–75) × (1.75) × (0.6) × (0.1) = 525 – 787.5 → <span class="var-dmg">788</span>
+
+<span class="comment">Step 1: 100 × (50–75)              = 5,000 – 7,500     (raw stack damage)</span>
+<span class="comment">Step 2: × 1.75 (A/D modifier)      = 8,750 – 13,125</span>
+<span class="comment">Step 3: × 0.6 (Radiant Armor)      = 5,250 – 7,875     (all-type reduction)</span>
+<span class="comment">Step 4: × 0.1 (capped tag-based)   = 525 – 787.5</span>
+<span class="comment">       round up → 788 final damage</span>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- =================================================== -->
+  <!-- HELP MODAL                                          -->
+  <!-- =================================================== -->
+  <div class="modal-overlay" id="helpModal">
+    <div class="modal">
+      <button class="modal-close" id="modalClose">×</button>
+      <h2>How To Use</h2>
+      <div class="modal-subtitle">A quick guide to each piece of the interface</div>
+
+      <div class="help-item">
+        <div class="help-item-title">Stack Badge</div>
+        <div class="help-item-body">The gold-bordered box above each 
+unit. Type a number to set how many creatures are in the stack (0–9999).
+ Each value you type becomes that unit's new <em>baseline</em> — the value Reset Sequence will restore the stack to. Changing it also refills the top creature to full HP.</div>
+      </div>
+
+      <div class="help-item">
+        <div class="help-item-title">Stat Cards (HP, Attack, Defense, Damage)</div>
+        <div class="help-item-body">Each stat shows an editable number you can type directly into. <strong>Click anywhere on the card</strong> to open a slider underneath — drag to adjust visually. HP ranges 0–1000, Attack &amp; Defense 0–200. Damage is a <em>range</em> (min &amp; max) because the formula needs it.</div>
+      </div>
+
+      <div class="help-item">
+        <div class="help-item-title">HP Bar &amp; Number</div>
+        <div class="help-item-body">Shown above each unit's body. Tracks the current HP of just the <strong>topmost creature</strong>
+ in the stack — the one taking the next hit. When it hits 0, that 
+creature dies and the next one steps up at full HP. Modifying the HP 
+stat refills the bar to the new max.</div>
+      </div>
+
+      <div class="help-item">
+        <div class="help-item-title">Strike Buttons</div>
+        <div class="help-item-body">Triggers a single attack from that side immediately. Use when you want to manually control who strikes when.</div>
+      </div>
+
+      <div class="help-item">
+        <div class="help-item-title">Battle Sequence</div>
+        <div class="help-item-body">Click the <strong>◀</strong> or <strong>▶</strong>
+ arrow to pick which side strikes first — that arrow lights up gold. 
+Then click the center "Battle Sequence" to perform one alternating 
+strike per click. The active side's arrow shows whose turn is next.</div>
+      </div>
+
+      <div class="help-item">
+        <div class="help-item-title">Reset Sequence</div>
+        <div class="help-item-body">Clears the first-attacker selection <strong>and</strong>
+ restores both units to their baseline: stack returns to the last value 
+you typed in, HP refills to max. Battle log is preserved — clear it 
+separately with the Clear button on the log.</div>
+      </div>
+
+      <div class="help-item">
+        <div class="help-item-title">Battle Log</div>
+        <div class="help-item-body">Shows every strike: attacker, damage rolled, kills, and the formula breakdown so you can see exactly how the number was reached.</div>
+      </div>
+
+      <div class="help-item">
+        <div class="help-item-title">Table &amp; Information Tab</div>
+        <div class="help-item-body">A clean reference for the damage 
+formulas, the full Attack/Defense delta table, common modifier patterns,
+ and the special rules (tag-based cap, all-type uncapped, min-1-damage, 
+etc.).</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ============================================================
+   STATE
+   ============================================================ */
+
+const state = {
+  view: 'battle',
+  units: {
+    left: {
+      stack: 50,
+      baselineStack: 50,  // user's last manually-set stack value; Reset Sequence restores to this
+      maxHP: 100,
+      currentHP: 100,   // HP of the topmost creature
+      attack: 10,
+      defense: 5,
+      dmgMin: 4,
+      dmgMax: 6,
+    },
+    right: {
+      stack: 30,
+      baselineStack: 30,
+      maxHP: 100,
+      currentHP: 100,
+      attack: 8,
+      defense: 8,
+      dmgMin: 5,
+      dmgMax: 8,
+    },
+  },
+  sequence: {
+    firstAttacker: null,   // 'left' | 'right' | null
+    nextAttacker: null,    // who attacks on next Battle Sequence press
+  },
+  log: [],
+  expandedStat: null,      // string like 'left-attack' or null
+};
+
+const STAT_CONFIG = {
+  hp:      { label: 'HP',      min: 0, max: 1000, key: 'maxHP'  },
+  attack:  { label: 'Attack',  min: 0, max: 200,  key: 'attack' },
+  defense: { label: 'Defense', min: 0, max: 200,  key: 'defense'},
+  damage:  { label: 'Damage',  min: 0, max: 500,  key: 'damage' }, // special: range
+};
+
+/* ============================================================
+   STAT ICONS (inline SVG)
+   ============================================================ */
+
+const ICONS = {
+  hp: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7-4.5-9.5-9C1 9 2.5 5 6.5 5c2 0 3.5 1 5.5 3 2-2 3.5-3 5.5-3 4 0 5.5 4 4 7-2.5 4.5-9.5 9-9.5 9z"/></svg>`,
+  attack: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5"/><path d="M13 19l6-6"/><path d="M16 16l4 4"/><path d="M19 21l2-2"/></svg>`,
+  defense: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l8 4v6c0 5-3.5 9.5-8 10-4.5-.5-8-5-8-10V6l8-4z"/></svg>`,
+  damage: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13,2 3,14 12,14 11,22 21,10 12,10"/></svg>`,
+};
+
+/* ============================================================
+   RENDERING
+   ============================================================ */
+
+function renderStatsPanel(side) {
+  const container = document.querySelector(`[data-side-stats="${side}"]`);
+  const unit = state.units[side];
+  container.innerHTML = '';
+
+  ['hp', 'attack', 'defense', 'damage'].forEach(statKey => {
+    const config = STAT_CONFIG[statKey];
+    const expandedKey = `${side}-${statKey}`;
+    const isExpanded = state.expandedStat === expandedKey;
+
+    const card = document.createElement('div');
+    card.className = 'stat-card' + (isExpanded ? ' expanded' : '');
+    card.dataset.stat = statKey;
+    card.dataset.side = side;
+
+    let valueHTML;
+    if (statKey === 'damage') {
+      valueHTML = `
+        <input type="number" class="stat-input stat-range-input"
+               min="0" max="${config.max}" value="${unit.dmgMin}"
+               data-stat-input="dmgMin">
+        <span class="stat-range-sep">—</span>
+        <input type="number" class="stat-input stat-range-input"
+               min="0" max="${config.max}" value="${unit.dmgMax}"
+               data-stat-input="dmgMax">
+      `;
+    } else {
+      valueHTML = `
+        <input type="number" class="stat-input"
+               min="${config.min}" max="${config.max}"
+               value="${unit[config.key]}"
+               data-stat-input="${config.key}">
+      `;
+    }
+
+    let sliderHTML;
+    if (statKey === 'damage') {
+      sliderHTML = `
+        <div class="slider-container">
+          <div class="slider-row">
+            <span class="slider-mini-label">Min</span>
+            <input type="range" class="themed" min="0" max="${config.max}"
+                   value="${unit.dmgMin}" data-slider="dmgMin"
+                   style="--pct: ${(unit.dmgMin / config.max) * 100}%">
+          </div>
+          <div class="slider-row">
+            <span class="slider-mini-label">Max</span>
+            <input type="range" class="themed" min="0" max="${config.max}"
+                   value="${unit.dmgMax}" data-slider="dmgMax"
+                   style="--pct: ${(unit.dmgMax / config.max) * 100}%">
+          </div>
+        </div>
+      `;
+    } else {
+      const v = unit[config.key];
+      sliderHTML = `
+        <div class="slider-container">
+          <div class="slider-row">
+            <input type="range" class="themed" min="${config.min}" max="${config.max}"
+                   value="${v}" data-slider="${config.key}"
+                   style="--pct: ${((v - config.min) / (config.max - config.min)) * 100}%">
+          </div>
+        </div>
+      `;
+    }
+
+    card.innerHTML = `
+      <div class="stat-header">
+        <div class="stat-icon">${ICONS[statKey]}</div>
+        <div class="stat-body">
+          <div class="stat-label">${config.label}</div>
+          <div class="stat-value-row">${valueHTML}</div>
+        </div>
+      </div>
+      ${sliderHTML}
+    `;
+
+    container.appendChild(card);
+  });
+
+  // Wire up events on the freshly-rendered cards
+  container.querySelectorAll('.stat-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      // Don't expand if user clicked into an input or slider
+      if (e.target.tagName === 'INPUT') return;
+      const stat = card.dataset.stat;
+      const key = `${side}-${stat}`;
+      state.expandedStat = state.expandedStat === key ? null : key;
+      renderStatsPanel('left');
+      renderStatsPanel('right');
+    });
+
+    card.querySelectorAll('.stat-input').forEach(input => {
+      input.addEventListener('input', (e) => {
+        const field = input.dataset.statInput;
+        let v = parseInt(input.value, 10);
+        if (isNaN(v)) v = 0;
+        applyStatChange(side, field, v);
+      });
+      input.addEventListener('click', e => e.stopPropagation());
+    });
+
+    card.querySelectorAll('input[type="range"]').forEach(slider => {
+      slider.addEventListener('input', (e) => {
+        const field = slider.dataset.slider;
+        const v = parseInt(slider.value, 10);
+        applyStatChange(side, field, v);
+        // Update the corresponding number input live
+        const matchingInput = card.querySelector(`[data-stat-input="${field}"]`);
+        if (matchingInput) matchingInput.value = v;
+        // Update the gradient fill on the slider
+        const config = STAT_CONFIG[card.dataset.stat];
+        const max = config.max;
+        slider.style.setProperty('--pct', `${(v / max) * 100}%`);
+      });
+      slider.addEventListener('click', e => e.stopPropagation());
+    });
+  });
+}
+
+function applyStatChange(side, field, value) {
+  const unit = state.units[side];
+
+  if (field === 'maxHP') {
+    unit.maxHP = clamp(value, 0, 1000);
+    // Any HP modification resets the HP bar to full — fresh top creature.
+    unit.currentHP = unit.maxHP;
+  } else if (field === 'attack') {
+    unit.attack = clamp(value, 0, 200);
+  } else if (field === 'defense') {
+    unit.defense = clamp(value, 0, 200);
+  } else if (field === 'dmgMin') {
+    unit.dmgMin = clamp(value, 0, 500);
+    if (unit.dmgMax < unit.dmgMin) unit.dmgMax = unit.dmgMin;
+  } else if (field === 'dmgMax') {
+    unit.dmgMax = clamp(value, 0, 500);
+    if (unit.dmgMin > unit.dmgMax) unit.dmgMin = unit.dmgMax;
+  } else if (field === 'stack') {
+    unit.stack = clamp(value, 0, 9999);
+    // Save this as the baseline — Reset Sequence will restore the stack to this value.
+    // Each new modification overwrites the previous baseline (one variable per unit).
+    unit.baselineStack = unit.stack;
+    // Reset top-unit HP whenever stack count changes by hand
+    unit.currentHP = unit.maxHP;
+  }
+
+  renderHPBar(side);
+  renderStackInput(side);
+  renderUnitDefeatedState(side);
+  updateButtonStates();
+  // Re-render stats if it's a damage min/max sync that changed both
+  if (field === 'dmgMin' || field === 'dmgMax') {
+    // sync the OTHER damage input field display
+    const otherField = field === 'dmgMin' ? 'dmgMax' : 'dmgMin';
+    const otherInput = document.querySelector(`[data-side-stats="${side}"] [data-stat-input="${otherField}"]`);
+    if (otherInput) otherInput.value = unit[otherField];
+    const otherSlider = document.querySelector(`[data-side-stats="${side}"] [data-slider="${otherField}"]`);
+    if (otherSlider) {
+      otherSlider.value = unit[otherField];
+      otherSlider.style.setProperty('--pct', `${(unit[otherField] / STAT_CONFIG.damage.max) * 100}%`);
+    }
+  }
+}
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function renderStackInput(side) {
+  const input = document.querySelector(`.unit-side[data-side="${side}"] [data-stat-input="stack"]`);
+  if (input && document.activeElement !== input) {
+    input.value = state.units[side].stack;
+  }
+}
+
+function renderHPBar(side) {
+  const unit = state.units[side];
+  const fill = document.querySelector(`[data-hp-fill="${side}"]`);
+  const text = document.querySelector(`[data-hp-text="${side}"]`);
+  const pct = unit.maxHP > 0 ? (unit.currentHP / unit.maxHP) * 100 : 0;
+  fill.style.width = `${pct}%`;
+  text.textContent = `${unit.currentHP} / ${unit.maxHP}`;
+
+  // Recolor HP bar based on remaining
+  if (pct < 25)       fill.style.background = 'linear-gradient(90deg, #aa3a3a, #c25555)';
+  else if (pct < 60)  fill.style.background = 'linear-gradient(90deg, #c9a559, #e6c878)';
+  else                fill.style.background = 'linear-gradient(90deg, #5fa05f, #7ab87a)';
+}
+
+function renderUnitDefeatedState(side) {
+  const svg = document.querySelector(`[data-unit-svg="${side}"]`);
+  if (state.units[side].stack === 0) {
+    svg.classList.add('defeated');
+  } else {
+    svg.classList.remove('defeated');
+  }
+}
+
+function renderAll() {
+  renderStatsPanel('left');
+  renderStatsPanel('right');
+  renderHPBar('left');
+  renderHPBar('right');
+  renderStackInput('left');
+  renderStackInput('right');
+  renderUnitDefeatedState('left');
+  renderUnitDefeatedState('right');
+  renderLog();
+  renderSequenceUI();
+  updateButtonStates();
+}
+
+/* ============================================================
+   DAMAGE CALCULATION — straight from the source document
+   ============================================================ */
+
+function calcModifier(atk, def) {
+  // (20 + ATK) / (20 + DEF), lower bound 0
+  let mod = (20 + atk) / (20 + def);
+  if (mod < 0) mod = 0;
+  return mod;
+}
+
+function rollDamage(attacker, defender) {
+  const modifier = calcModifier(attacker.attack, defender.defense);
+  const baseMin = attacker.stack * attacker.dmgMin * modifier;
+  const baseMax = attacker.stack * attacker.dmgMax * modifier;
+  // Random within the range
+  const raw = baseMin + Math.random() * (baseMax - baseMin);
+  // Rounding rule: >=0.5 up, <0.5 down → standard Math.round
+  let final = Math.round(raw);
+  // Min 1 damage rule
+  if (final < 1) final = 1;
+  return {
+    modifier,
+    rangeMin: Math.max(1, Math.round(baseMin)),
+    rangeMax: Math.max(1, Math.round(baseMax)),
+    rolled: raw,
+    final,
+  };
+}
+
+function applyDamage(defender, damage) {
+  // Total HP = (stack - 1) full creatures + currentHP of top
+  const totalHP = Math.max(0, (defender.stack - 1) * defender.maxHP + defender.currentHP);
+  const newTotal = Math.max(0, totalHP - damage);
+  const oldStack = defender.stack;
+
+  if (newTotal === 0) {
+    defender.stack = 0;
+    defender.currentHP = 0;
+  } else {
+    defender.stack = Math.ceil(newTotal / defender.maxHP);
+    defender.currentHP = newTotal - (defender.stack - 1) * defender.maxHP;
+    if (defender.currentHP === 0) defender.currentHP = defender.maxHP;
+  }
+
+  return {
+    killed: oldStack - defender.stack,
+    survived: defender.stack > 0,
+  };
+}
+
+/* ============================================================
+   STRIKE EXECUTION
+   ============================================================ */
+
+function strike(attackerSide) {
+  const defenderSide = attackerSide === 'left' ? 'right' : 'left';
+  const attacker = state.units[attackerSide];
+  const defender = state.units[defenderSide];
+
+  if (attacker.stack === 0) {
+    logEntry({ type: 'system', html: `<em>${actorLabel(attackerSide)} has no units to strike with.</em>` });
+    return false;
+  }
+  if (defender.stack === 0) {
+    logEntry({ type: 'system', html: `<em>${actorLabel(defenderSide)} is already defeated.</em>` });
+    return false;
+  }
+
+  const dmg = rollDamage(attacker, defender);
+  const result = applyDamage(defender, dmg.final);
+
+  // Visual: lunge attacker, shake defender, float damage
+  playStrikeVisuals(attackerSide, defenderSide, dmg.final, result.killed);
+
+  // Log it
+  const formula = `(20+${attacker.attack})/(20+${defender.defense}) = ${dmg.modifier.toFixed(3)} × ${attacker.stack} × ${attacker.dmgMin}–${attacker.dmgMax} → ${dmg.rangeMin}–${dmg.rangeMax}`;
+  let entryHtml = `${actorLabel(attackerSide)} strikes ${actorLabel(defenderSide)} for <span class="dmg">${dmg.final}</span> damage`;
+  if (result.killed > 0) {
+    entryHtml += ` <span class="killed">— ${result.killed} slain</span>`;
+  }
+  if (defender.stack > 0) {
+    entryHtml += ` <span style="color:var(--cream-dim); font-size:13px;">(${defender.stack} remain, top HP ${defender.currentHP}/${defender.maxHP})</span>`;
+  }
+  entryHtml += `<div class="formula">${formula}</div>`;
+
+  logEntry({ type: `${attackerSide}-attack`, html: entryHtml });
+
+  renderHPBar(defenderSide);
+  renderStackInput(defenderSide);
+  renderStatsPanel(defenderSide);
+  renderUnitDefeatedState(defenderSide);
+  updateButtonStates();
+
+  if (!result.survived) {
+    logEntry({ type: 'victory', html: `★ ${actorLabel(attackerSide)} is victorious — ${actorLabel(defenderSide)} stack annihilated.` });
+  }
+
+  return true;
+}
+
+function actorLabel(side) {
+  if (side === 'left') return `<span class="actor-left">Left</span>`;
+  return `<span class="actor-right">Right</span>`;
+}
+
+function playStrikeVisuals(attackerSide, defenderSide, damage, killed) {
+  const attackerSvg = document.querySelector(`[data-unit-svg="${attackerSide}"]`);
+  const defenderSvg = document.querySelector(`[data-unit-svg="${defenderSide}"]`);
+  const defenderWrap = defenderSvg.closest('.unit-figure-wrap');
+
+  attackerSvg.classList.add('attacking');
+  setTimeout(() => attackerSvg.classList.remove('attacking'), 500);
+
+  setTimeout(() => {
+    defenderSvg.classList.add('taking-hit');
+    setTimeout(() => defenderSvg.classList.remove('taking-hit'), 400);
+
+    // Floating damage number
+    const float = document.createElement('div');
+    float.className = 'damage-float';
+    float.innerHTML = `−${damage}${killed > 0 ? `<span class="killed">${killed} SLAIN</span>` : ''}`;
+    defenderWrap.appendChild(float);
+    setTimeout(() => float.remove(), 1700);
+  }, 250);
+}
+
+/* ============================================================
+   BATTLE SEQUENCE
+   ============================================================ */
+
+function setFirstAttacker(side) {
+  state.sequence.firstAttacker = side;
+  state.sequence.nextAttacker = side;
+  renderSequenceUI();
+}
+
+function advanceSequence() {
+  if (!state.sequence.nextAttacker) return;
+  const side = state.sequence.nextAttacker;
+  const ok = strike(side);
+  if (ok) {
+    state.sequence.nextAttacker = side === 'left' ? 'right' : 'left';
+  }
+  renderSequenceUI();
+}
+
+function resetSequence() {
+  // Clear the turn-order selection
+  state.sequence.firstAttacker = null;
+  state.sequence.nextAttacker = null;
+
+  // Restore each unit's stack to its baseline (last user-set value)
+  // and refill the top creature to full HP.
+  ['left', 'right'].forEach(side => {
+    const unit = state.units[side];
+    unit.stack = unit.baselineStack;
+    unit.currentHP = unit.maxHP;
+  });
+
+  logEntry({ type: 'system', html: `<em>Sequence reset — both stacks restored (Left ${state.units.left.baselineStack}, Right ${state.units.right.baselineStack}) at full HP.</em>` });
+
+  renderAll();
+}
+
+function renderSequenceUI() {
+  const arrowL = document.querySelector('[data-seq-arrow="left"]');
+  const arrowR = document.querySelector('[data-seq-arrow="right"]');
+  const seqHint = document.getElementById('seqHint');
+  const seqCenter = document.getElementById('seqCenter');
+
+  arrowL.classList.toggle('active', state.sequence.nextAttacker === 'left');
+  arrowR.classList.toggle('active', state.sequence.nextAttacker === 'right');
+
+  if (!state.sequence.firstAttacker) {
+    seqHint.textContent = 'Choose who strikes first';
+    seqCenter.disabled = true;
+  } else if (state.units.left.stack === 0 || state.units.right.stack === 0) {
+    seqHint.textContent = 'Battle concluded';
+    seqCenter.disabled = true;
+  } else {
+    const next = state.sequence.nextAttacker;
+    seqHint.textContent = `Next: ${next === 'left' ? 'Left strikes' : 'Right strikes'}`;
+    seqCenter.disabled = false;
+  }
+}
+
+function updateButtonStates() {
+  document.querySelectorAll('.strike-btn').forEach(btn => {
+    const side = btn.dataset.strike;
+    const opp = side === 'left' ? 'right' : 'left';
+    btn.disabled = state.units[side].stack === 0 || state.units[opp].stack === 0;
+  });
+  renderSequenceUI();
+}
+
+/* ============================================================
+   BATTLE LOG
+   ============================================================ */
+
+function logEntry({ type, html }) {
+  state.log.push({ type, html, timestamp: Date.now() });
+  renderLog();
+}
+
+function renderLog() {
+  const body = document.getElementById('logBody');
+  if (state.log.length === 0) {
+    body.innerHTML = '<div class="log-empty">No strikes yet. Set up your units and press Strike or Battle Sequence.</div>';
+    return;
+  }
+  body.innerHTML = state.log
+    .slice()
+    .reverse()
+    .map(e => `<div class="log-entry ${e.type}">${e.html}</div>`)
+    .join('');
+}
+
+function clearLog() {
+  state.log = [];
+  renderLog();
+}
+
+/* ============================================================
+   VIEW SWITCHING
+   ============================================================ */
+
+function setView(view) {
+  state.view = view;
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.view === view);
+  });
+  document.querySelectorAll('.view').forEach(v => {
+    v.classList.toggle('active', v.id === `view-${view}`);
+  });
+}
+
+/* ============================================================
+   MODIFIER TABLE (Table & Information view)
+   ============================================================ */
+
+function buildModifierTable() {
+  // Same axis values as the source document
+  const atkValues = [0, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40];
+  const defValues = [0, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40];
+  const table = document.getElementById('modTable');
+
+  // Header
+  let html = '<thead><tr>';
+  html += `<th class="corner"><div class="axis-label"><span class="def">DEF ↓</span><span class="atk">ATK →</span></div></th>`;
+  atkValues.forEach(a => { html += `<th>${a}</th>`; });
+  html += '</tr></thead><tbody>';
+
+  defValues.forEach(d => {
+    html += `<tr><td class="row-label">${d}</td>`;
+    atkValues.forEach(a => {
+      // delta = (20+a)/(20+d) - 1
+      const delta = (20 + a) / (20 + d) - 1;
+      const cls = colorClassForDelta(delta);
+      const diag = (a === d) ? ' diag' : '';
+      html += `<td class="${cls}${diag}">${formatDelta(delta)}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  table.innerHTML = html;
+}
+
+function colorClassForDelta(d) {
+  if (d <= -0.5) return 'mod-neg-3';
+  if (d <= -0.25) return 'mod-neg-2';
+  if (d < 0) return 'mod-neg-1';
+  if (d === 0) return '';
+  if (d <= 0.25) return 'mod-pos-1';
+  if (d <= 0.5) return 'mod-pos-2';
+  if (d <= 1.0) return 'mod-pos-3';
+  return 'mod-pos-4';
+}
+
+function formatDelta(d) {
+  if (d === 0) return '0';
+  const rounded = Math.round(d * 100) / 100;
+  if (rounded > 0) return '+' + rounded.toFixed(2);
+  return rounded.toFixed(2);
+}
+
+/* ============================================================
+   EVENT WIRING
+   ============================================================ */
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => setView(tab.dataset.view));
+});
+
+document.querySelectorAll('[data-strike]').forEach(btn => {
+  btn.addEventListener('click', () => strike(btn.dataset.strike));
+});
+
+document.querySelectorAll('[data-seq-arrow]').forEach(arrow => {
+  arrow.addEventListener('click', () => setFirstAttacker(arrow.dataset.seqArrow));
+});
+
+document.getElementById('seqCenter').addEventListener('click', advanceSequence);
+document.getElementById('resetSeq').addEventListener('click', resetSequence);
+document.getElementById('logClear').addEventListener('click', clearLog);
+
+// Stack inputs (above the unit, not in the stats panel)
+document.querySelectorAll('[data-stat-input="stack"]').forEach(input => {
+  const side = input.closest('.unit-side').dataset.side;
+  input.addEventListener('input', e => {
+    let v = parseInt(input.value, 10);
+    if (isNaN(v)) v = 0;
+    applyStatChange(side, 'stack', v);
+  });
+});
+
+// Help modal
+document.getElementById('helpBtn').addEventListener('click', () => {
+  document.getElementById('helpModal').classList.add('open');
+});
+document.getElementById('modalClose').addEventListener('click', () => {
+  document.getElementById('helpModal').classList.remove('open');
+});
+document.getElementById('helpModal').addEventListener('click', (e) => {
+  if (e.target.id === 'helpModal') {
+    document.getElementById('helpModal').classList.remove('open');
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    document.getElementById('helpModal').classList.remove('open');
+  }
+});
+
+/* ============================================================
+   INITIAL RENDER
+   ============================================================ */
+
+buildModifierTable();
+renderAll();
+</script>
+
+
+</body></html>
