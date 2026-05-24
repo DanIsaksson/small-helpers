@@ -10,3 +10,8 @@ Small helpers is a project where I aim to keep small independent work I've gener
 All Small Helper projects are self-contained HTML projects.
 
 As most of these are meant to be highly convenient and easy to use, without much backend or need for continuity, all "Small Helpers" can be used on any browser. 
+
+
+## FEEDBACK WANTED FOR OLDEN ERA UNIT VS UNIT BATTLE SIMULATOR
+
+If you like the battle simulator for damage and skill testing etc., feel free to come to me with feedback. Others are working on full-scale battle simulators using the data of the game, this is smaller in scale and intended to be used for testing ideas, structuring builds and seeing what you can accomplish with a unit versus another.
